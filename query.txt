@@ -1,0 +1,1 @@
+_sourceCategory="gccm/projectsight/prod/application/log" AND "Type = \"Error\"" AND "A potentially dangerous Request.Path value was detected from the client (:)." | limit 2
