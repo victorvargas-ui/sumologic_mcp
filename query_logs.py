@@ -12,17 +12,21 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 
-def load_config(config_file: str) -> dict:
-    """Load configuration from JSON file, with env var overrides."""
+def load_config(config_file: str, args=None) -> dict:
+    """Load configuration from JSON file, with env var and CLI arg overrides."""
     config = {}
     if config_file and Path(config_file).exists():
         with open(config_file, "r", encoding="utf-8") as f:
             config = json.load(f)
 
+    cli_endpoint = getattr(args, "endpoint", None) if args else None
+    cli_access_id = getattr(args, "access_id", None) if args else None
+    cli_access_key = getattr(args, "access_key", None) if args else None
+
     return {
-        "endpoint": os.environ.get("SUMOLOGIC_ENDPOINT", config.get("endpoint", "")),
-        "access_id": os.environ.get("SUMOLOGIC_ACCESS_ID", config.get("access_id", "")),
-        "access_key": os.environ.get("SUMOLOGIC_ACCESS_KEY", config.get("access_key", "")),
+        "endpoint": cli_endpoint or os.environ.get("SUMOLOGIC_ENDPOINT", config.get("endpoint", "")),
+        "access_id": cli_access_id or os.environ.get("SUMOLOGIC_ACCESS_ID", config.get("access_id", "")),
+        "access_key": cli_access_key or os.environ.get("SUMOLOGIC_ACCESS_KEY", config.get("access_key", "")),
     }
 
 
@@ -47,6 +51,18 @@ def parse_args():
     parser.add_argument(
         "--limit", type=int, default=200,
         help="Max results to return (default: 200)"
+    )
+    parser.add_argument(
+        "--access-id", dest="access_id", default=None,
+        help="Sumo Logic access ID (overrides env var and config file)"
+    )
+    parser.add_argument(
+        "--access-key", dest="access_key", default=None,
+        help="Sumo Logic access key (overrides env var and config file)"
+    )
+    parser.add_argument(
+        "--endpoint", default=None,
+        help="Sumo Logic API endpoint (overrides env var and config file)"
     )
     args = parser.parse_args()
     if not args.query and not args.query_file:
@@ -76,7 +92,7 @@ def api_call(method, url, auth_header, data=None, params=None):
 
 async def main():
     args = parse_args()
-    config = load_config(args.config_file)
+    config = load_config(args.config_file, args)
 
     endpoint = config["endpoint"]
     access_id = config["access_id"]
