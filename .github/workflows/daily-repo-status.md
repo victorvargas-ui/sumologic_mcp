@@ -71,7 +71,7 @@ Create an upbeat daily status report for the repo as a GitHub issue.
      ```
    - Execute the query via CLI (credentials are injected from repository secrets as environment variables `SUMOLOGIC_ACCESS_ID`, `SUMOLOGIC_ACCESS_KEY`, and `SUMOLOGIC_ENDPOINT`):
      ```
-     .venv\Scripts\python.exe query_logs.py --query-file query.txt --hours 3 --limit 1000
+     python query_logs.py --query-file query.txt --hours 3 --limit 1000
      ```
    - The script submits the job to the Sumo Logic REST API (`POST /api/v1/search/jobs`), polls until status is `DONE GATHERING RESULTS`, then fetches records from `/api/v1/search/jobs/{id}/records`
    - Read the output inline from the terminal; if output exceeds ~20KB it will be written to a temp file — use `read_file` to retrieve it
@@ -83,7 +83,7 @@ Create an upbeat daily status report for the repo as a GitHub issue.
      ```
    - Execute the query:
      ```
-     .venv\Scripts\python.exe query_logs.py --query-file query.txt --hours 3 --limit 200
+     python query_logs.py --query-file query.txt --hours 3 --limit 200
      ```
    - Read and analyze the returned records to extract the structured fields
 6. Present the filtered values in a summary table using a **consistent criteria** with the following columns — apply the same column definitions uniformly across all rows, extracting each field from the structured log data:

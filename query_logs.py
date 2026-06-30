@@ -1,11 +1,13 @@
 """Query Sumo Logic for ProjectSight production application errors from the last hour."""
 
 import argparse
-import asyncio
+import base64
 import json
 import os
 import sys
-import httpx
+import time
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -54,6 +56,24 @@ def parse_args():
             args.query = f.read().strip()
     return args
 
+def api_call(method, url, auth_header, data=None, params=None):
+    """Make a REST API call using only stdlib urllib."""
+    if params:
+        query_string = "&".join(f"{k}={v}" for k, v in params.items())
+        url = f"{url}?{query_string}"
+    body = json.dumps(data).encode() if data else None
+    req = urllib.request.Request(url, data=body, method=method)
+    req.add_header("Authorization", auth_header)
+    req.add_header("Accept", "application/json")
+    if body:
+        req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
 async def main():
     args = parse_args()
     config = load_config(args.config_file)
@@ -67,147 +87,138 @@ async def main():
         print("       via config file (--config-file) or environment variables.")
         sys.exit(1)
 
+    credentials = base64.b64encode(f"{access_id}:{access_key}".encode()).decode()
+    auth_header = f"Basic {credentials}"
+
     now = datetime.now(timezone.utc)
     from_time = (now - timedelta(hours=args.hours)).strftime("%Y-%m-%dT%H:%M:%S")
     to_time = now.strftime("%Y-%m-%dT%H:%M:%S")
-    
+
     print(f"Searching Sumo Logic logs...")
     print(f"Query: {args.query}")
     print(f"Time range: {from_time} to {to_time} (UTC)")
     print("=" * 80)
-    
-    async with httpx.AsyncClient(
-        auth=(access_id, access_key),
-        timeout=60.0
-    ) as client:
-        # Create search job
-        payload = {
-            "query": args.query,
-            "from": from_time,
-            "to": to_time,
-            "timeZone": "UTC"
-        }
-        
-        resp = await client.post(
-            f"{endpoint}/api/v1/search/jobs",
-            json=payload,
-            headers={"Content-Type": "application/json", "Accept": "application/json"}
+
+    # Create search job
+    payload = {
+        "query": args.query,
+        "from": from_time,
+        "to": to_time,
+        "timeZone": "UTC"
+    }
+
+    status_code, resp_data = api_call(
+        "POST", f"{endpoint}/api/v1/search/jobs", auth_header, data=payload
+    )
+
+    if status_code != 202:
+        print(f"Error creating search job: {status_code}")
+        print(resp_data)
+        return
+
+    job_id = resp_data.get("id")
+    print(f"Search job created: {job_id}")
+
+    # Poll for completion
+    status_data = {}
+    for i in range(60):
+        time.sleep(3)
+        poll_code, status_data = api_call(
+            "GET", f"{endpoint}/api/v1/search/jobs/{job_id}", auth_header
         )
-        
-        if resp.status_code != 202:
-            print(f"Error creating search job: {resp.status_code}")
-            print(resp.text)
-            return
-        
-        job_id = resp.json().get("id")
-        print(f"Search job created: {job_id}")
-        
-        # Poll for completion
-        for i in range(60):
-            await asyncio.sleep(3)
-            status_resp = await client.get(
-                f"{endpoint}/api/v1/search/jobs/{job_id}",
-                headers={"Accept": "application/json"}
-            )
-            status_data = status_resp.json()
-            state = status_data.get("state", "")
-            msg_count = status_data.get("messageCount", 0)
-            
-            print(f"  Status: {state} | Messages: {msg_count}")
-            
-            if state == "DONE GATHERING RESULTS":
-                break
-            elif state in ("CANCELLED", "FORCE PAUSED"):
-                print(f"Job ended with state: {state}")
-                return
-        else:
-            print("Timeout waiting for search results")
-            return
-        
-        # Get messages or records
+        state = status_data.get("state", "")
         msg_count = status_data.get("messageCount", 0)
-        rec_count = status_data.get("recordCount", 0)
-        
-        print(f"\nMessages: {msg_count}, Records: {rec_count}")
-        
-        # If we have records (aggregation query), get records
-        if rec_count > 0:
-            limit = min(rec_count, args.limit)
-            results_resp = await client.get(
-                f"{endpoint}/api/v1/search/jobs/{job_id}/records",
-                params={"offset": 0, "limit": limit},
-                headers={"Accept": "application/json"}
-            )
-            
-            if results_resp.status_code != 200:
-                print(f"Error getting records: {results_resp.status_code}")
-                print(results_resp.text)
-                return
-            
-            results = results_resp.json()
-            records = results.get("records", [])
-            fields = results.get("fields", [])
-            
-            print(f"\n{'=' * 80}")
-            print(f"Found {rec_count} records. Showing first {len(records)}:")
-            print(f"{'=' * 80}\n")
-            
-            # Print field headers
-            field_names = [f.get("name", "") for f in fields]
-            print(" | ".join(field_names))
-            print("-" * 80)
-            
-            for rec in records:
-                rec_map = rec.get("map", {})
-                values = [str(rec_map.get(fn, "")) for fn in field_names]
-                print(" | ".join(values))
-        else:
-            # Get raw messages
-            limit = min(msg_count, args.limit)
-            if limit == 0:
-                print("\nNo results found.")
-                return
-            
-            results_resp = await client.get(
-                f"{endpoint}/api/v1/search/jobs/{job_id}/messages",
-                params={"offset": 0, "limit": limit},
-                headers={"Accept": "application/json"}
-            )
-        
-            if results_resp.status_code != 200:
-                print(f"Error getting results: {results_resp.status_code}")
-                print(results_resp.text)
-                return
-            
-            results = results_resp.json()
-            messages = results.get("messages", [])
-            
-            print(f"\n{'=' * 80}")
-            print(f"Found {msg_count} total messages. Showing first {len(messages)}:")
-            print(f"{'=' * 80}\n")
-            
-            for i, msg in enumerate(messages[:10], 1):
-                msg_map = msg.get("map", {})
-                timestamp = msg_map.get("_messagetime", msg_map.get("_receipttime", ""))
-                source_cat = msg_map.get("_sourcecategory", "")
-                raw = msg_map.get("_raw", "")
-                
-                # Format timestamp
-                if timestamp:
-                    try:
-                        ts = datetime.fromtimestamp(int(timestamp) / 1000, tz=timezone.utc)
-                        timestamp = ts.strftime("%Y-%m-%d %H:%M:%S UTC")
-                    except (ValueError, TypeError):
-                        pass
-                
-                print(f"[{i}] {timestamp} | {source_cat}")
-                print(f"    {raw[:5000]}")
-                print()
-        
-        # Delete job
-        await client.delete(f"{endpoint}/api/v1/search/jobs/{job_id}")
-        print(f"\nSearch job {job_id} cleaned up.")
+
+        print(f"  Status: {state} | Messages: {msg_count}")
+
+        if state == "DONE GATHERING RESULTS":
+            break
+        elif state in ("CANCELLED", "FORCE PAUSED"):
+            print(f"Job ended with state: {state}")
+            return
+    else:
+        print("Timeout waiting for search results")
+        return
+
+    # Get messages or records
+    msg_count = status_data.get("messageCount", 0)
+    rec_count = status_data.get("recordCount", 0)
+
+    print(f"\nMessages: {msg_count}, Records: {rec_count}")
+
+    # If we have records (aggregation query), get records
+    if rec_count > 0:
+        limit = min(rec_count, args.limit)
+        results_code, results = api_call(
+            "GET", f"{endpoint}/api/v1/search/jobs/{job_id}/records",
+            auth_header, params={"offset": 0, "limit": limit}
+        )
+
+        if results_code != 200:
+            print(f"Error getting records: {results_code}")
+            print(results)
+            return
+
+        records = results.get("records", [])
+        fields = results.get("fields", [])
+
+        print(f"\n{'=' * 80}")
+        print(f"Found {rec_count} records. Showing first {len(records)}:")
+        print(f"{'=' * 80}\n")
+
+        field_names = [f.get("name", "") for f in fields]
+        print(" | ".join(field_names))
+        print("-" * 80)
+
+        for rec in records:
+            rec_map = rec.get("map", {})
+            values = [str(rec_map.get(fn, "")) for fn in field_names]
+            print(" | ".join(values))
+    else:
+        # Get raw messages
+        limit = min(msg_count, args.limit)
+        if limit == 0:
+            print("\nNo results found.")
+            return
+
+        results_code, results = api_call(
+            "GET", f"{endpoint}/api/v1/search/jobs/{job_id}/messages",
+            auth_header, params={"offset": 0, "limit": limit}
+        )
+
+        if results_code != 200:
+            print(f"Error getting results: {results_code}")
+            print(results)
+            return
+
+        messages = results.get("messages", [])
+
+        print(f"\n{'=' * 80}")
+        print(f"Found {msg_count} total messages. Showing first {len(messages)}:")
+        print(f"{'=' * 80}\n")
+
+        for i, msg in enumerate(messages[:10], 1):
+            msg_map = msg.get("map", {})
+            timestamp = msg_map.get("_messagetime", msg_map.get("_receipttime", ""))
+            source_cat = msg_map.get("_sourcecategory", "")
+            raw = msg_map.get("_raw", "")
+
+            if timestamp:
+                try:
+                    ts = datetime.fromtimestamp(int(timestamp) / 1000, tz=timezone.utc)
+                    timestamp = ts.strftime("%Y-%m-%d %H:%M:%S UTC")
+                except (ValueError, TypeError):
+                    pass
+
+            print(f"[{i}] {timestamp} | {source_cat}")
+            print(f"    {raw[:5000]}")
+            print()
+
+    # Delete job
+    api_call("DELETE", f"{endpoint}/api/v1/search/jobs/{job_id}", auth_header)
+    print(f"\nSearch job {job_id} cleaned up.")
 
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
