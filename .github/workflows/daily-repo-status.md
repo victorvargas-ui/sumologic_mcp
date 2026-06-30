@@ -16,6 +16,11 @@ permissions:
 
 network: defaults
 
+secrets:
+  - SUMOLOGIC_ACCESS_ID
+  - SUMOLOGIC_ACCESS_KEY
+  - SUMOLOGIC_ENDPOINT
+
 tools:
   github:
     # If in a public repo, setting `lockdown: false` allows
@@ -61,7 +66,7 @@ Create an upbeat daily status report for the repo as a GitHub issue.
      ```
      | count by Message | sort by _count desc
      ```
-   - Execute the query via CLI:
+   - Execute the query via CLI (credentials are injected from repository secrets as environment variables `SUMOLOGIC_ACCESS_ID`, `SUMOLOGIC_ACCESS_KEY`, and `SUMOLOGIC_ENDPOINT`):
      ```
      .venv\Scripts\python.exe query_logs.py --query-file query.txt --hours 3 --limit 1000
      ```
