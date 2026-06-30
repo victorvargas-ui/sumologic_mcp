@@ -17,9 +17,12 @@ permissions:
 network: defaults
 
 secrets:
-  - SUMOLOGIC_ACCESS_ID
-  - SUMOLOGIC_ACCESS_KEY
-  - SUMOLOGIC_ENDPOINT
+  SUMOLOGIC_ACCESS_ID:
+    value: ${{ secrets.SUMOLOGIC_ACCESS_ID }}
+  SUMOLOGIC_ACCESS_KEY:
+    value: ${{ secrets.SUMOLOGIC_ACCESS_KEY }}
+  SUMOLOGIC_ENDPOINT:
+    value: ${{ secrets.SUMOLOGIC_ENDPOINT }}
 
 tools:
   github:
