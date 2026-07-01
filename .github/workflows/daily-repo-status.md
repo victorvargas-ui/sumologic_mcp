@@ -14,7 +14,9 @@ permissions:
   issues: read
   pull-requests: read
 
-network: defaults
+network:
+  allowed:
+    - service.us2.sumologic.com
 
 secrets:
   SUMOLOGIC_ACCESS_ID:
