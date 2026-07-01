@@ -69,9 +69,9 @@ Create an upbeat daily status report for the repo as a GitHub issue.
      ```
      | count by Message | sort by _count desc
      ```
-   - Execute the query via CLI, passing the repository secrets as explicit arguments:
+   - Execute the query via CLI. You have access to the secrets `SUMOLOGIC_ACCESS_ID`, `SUMOLOGIC_ACCESS_KEY`, and `SUMOLOGIC_ENDPOINT` — substitute their actual values directly into the command arguments (do not use shell variable references):
      ```
-     python query_logs.py --query-file query.txt --hours 3 --limit 1000 --access-id $SUMOLOGIC_ACCESS_ID --access-key $SUMOLOGIC_ACCESS_KEY --endpoint $SUMOLOGIC_ENDPOINT
+     python query_logs.py --query-file query.txt --hours 3 --limit 1000 --access-id <SUMOLOGIC_ACCESS_ID> --access-key <SUMOLOGIC_ACCESS_KEY> --endpoint <SUMOLOGIC_ENDPOINT>
      ```
    - The script submits the job to the Sumo Logic REST API (`POST /api/v1/search/jobs`), polls until status is `DONE GATHERING RESULTS`, then fetches records from `/api/v1/search/jobs/{id}/records`
    - Read the output inline from the terminal; if output exceeds ~20KB it will be written to a temp file — use `read_file` to retrieve it
@@ -81,9 +81,9 @@ Create an upbeat daily status report for the repo as a GitHub issue.
      ```
      | where Message = "<value>" | limit 200
      ```
-   - Execute the query:
+   - Execute the query, substituting the actual secret values directly into the command arguments:
      ```
-     python query_logs.py --query-file query.txt --hours 3 --limit 200 --access-id $SUMOLOGIC_ACCESS_ID --access-key $SUMOLOGIC_ACCESS_KEY --endpoint $SUMOLOGIC_ENDPOINT
+     python query_logs.py --query-file query.txt --hours 3 --limit 200 --access-id <SUMOLOGIC_ACCESS_ID> --access-key <SUMOLOGIC_ACCESS_KEY> --endpoint <SUMOLOGIC_ENDPOINT>
      ```
    - Read and analyze the returned records to extract the structured fields
 6. Present the filtered values in a summary table using a **consistent criteria** with the following columns — apply the same column definitions uniformly across all rows, extracting each field from the structured log data:
