@@ -832,6 +832,9 @@ jobs:
           GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: github-actions[bot]
           RUNNER_TEMP: ${{ runner.temp }}
+          SUMOLOGIC_ACCESS_ID: ${{ secrets.SUMOLOGIC_ACCESS_ID }}
+          SUMOLOGIC_ACCESS_KEY: ${{ secrets.SUMOLOGIC_ACCESS_KEY }}
+          SUMOLOGIC_ENDPOINT: ${{ secrets.SUMOLOGIC_ENDPOINT }}
           TRACEPARENT: ${{ env.GITHUB_AW_OTEL_TRACE_ID != '' && env.GITHUB_AW_OTEL_PARENT_SPAN_ID != '' && format('00-{0}-{1}-01', env.GITHUB_AW_OTEL_TRACE_ID, env.GITHUB_AW_OTEL_PARENT_SPAN_ID) || '' }}
       - name: Detect agent errors
         if: always()
@@ -867,11 +870,14 @@ jobs:
             const { main } = require('${{ runner.temp }}/gh-aw/actions/redact_secrets.cjs');
             await main();
         env:
-          GH_AW_SECRET_NAMES: 'COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN'
+          GH_AW_SECRET_NAMES: 'COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN,SUMOLOGIC_ACCESS_ID,SUMOLOGIC_ACCESS_KEY,SUMOLOGIC_ENDPOINT'
           SECRET_COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           SECRET_GH_AW_GITHUB_MCP_SERVER_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
           SECRET_GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
           SECRET_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SECRET_SUMOLOGIC_ACCESS_ID: ${{ secrets.SUMOLOGIC_ACCESS_ID }}
+          SECRET_SUMOLOGIC_ACCESS_KEY: ${{ secrets.SUMOLOGIC_ACCESS_KEY }}
+          SECRET_SUMOLOGIC_ENDPOINT: ${{ secrets.SUMOLOGIC_ENDPOINT }}
       - name: Append agent step summary
         if: always()
         run: bash "${RUNNER_TEMP}/gh-aw/actions/append_agent_step_summary.sh"
